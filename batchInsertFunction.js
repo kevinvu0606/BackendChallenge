@@ -13,7 +13,9 @@ fs.createReadStream('sampledata.csv')
     filteredData.shift()
     const sql = `
     INSERT INTO orders(orderid, customerid, item, quantity)
-    VALUES($1, $2, $3, $4)
+    SELECT $1::text , $2::text, $3::text , $4
+    WHERE EXISTS
+    (SELECT 1 FROM customers WHERE customers.customerid = $2)
     `
     db.connect((err, client, done) => {
       if (err) throw err;
