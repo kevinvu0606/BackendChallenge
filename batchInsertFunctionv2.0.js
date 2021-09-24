@@ -3,41 +3,58 @@ const fs = require('fs')
 const data = fs.readFileSync('./sampledata.csv', 'utf8')
 const csv = require('fast-csv')
 const format = require('pg-format')
+const http = require("http")
+const file = fs.createWriteStream("data.csv")
+
+http.get("http://www.example.com/test.csv", response => {
+  response.pipe(file);
+});
 
 
 
 // 1.import CSV file from ULR
-let filteredData = []
+let unfilteredData = []
 let id = []
-
+let filteredData = []
 fs.createReadStream('sampledata.csv')
   .pipe(csv.parse())
   .on('data', function (data) {
-    filteredData.push(data)
-    id.push(data[1])
-
+    unfilteredData.push(data)
   })
-  .on('end', function () {
+  .on('end', async function () {
     // we remove the headers
-    filteredData.shift()
-    id.shift()
+    unfilteredData.shift()
+    console.time('manyinsert')
+    let validId = await db.query('SELECT customerid FROM customers', (error, results) => {
+      if (error) {
+        throw error
+      }
+      results.rows.forEach(row => { id.push(row.customerid) })
+
+      for (i = 0; i < unfilteredData.length; i++) {
+        if (id.includes(unfilteredData[i][1])) {
+          filteredData.push(unfilteredData[i])
+        } else {
+          console.log('invalidID')
+        }
+      }
+    })
+
+
+
     const sql = `
     INSERT INTO orders(orderid, customerid, item, quantity)
-    SELECT  %L
-    WHERE EXISTS ( SELECT customerid FROM customers WHERE customers.customerid = %L)
+    VALUES  %L
     `
-
     db.connect((err, client, done) => {
       if (err) throw err;
 
       try {
-        console.log(id)
-        console.log(filteredData)
-        client.query(format(sql, filteredData, id));
+        client.query(format(sql, filteredData));
+        console.timeEnd('manyinsert')
       } finally {
         done();
       }
     });
   });
-
 
